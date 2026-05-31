@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>电磁交响：带电粒子在复合场中的舞动 | RK4高精度轨迹</title>
+  <style>
+    * {
+      user-select: none;
+    }
+    body {
+      font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
+      color: #edf2ff;
+      overflow: hidden;
+      height: 100vh;
+    }
+    .wrap {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+      padding: 16px;
+      height: calc(100vh - 32px);
+      box-sizing: border-box;
+    }
+    .panel {
+      background: rgba(12, 18, 28, 0.65);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(72, 87, 138, 0.45);
+      border-radius: 28px;
+      padding: 16px 14px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+      transition: all 0.2s ease;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .panel::-webkit-scrollbar {
+      width: 5px;
+    }
+    .title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #c0e0ff, #9f7aff);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      margin-bottom: 16px;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .title::before {
+      content: "⚡";
+      font-size: 1.4rem;
+      background: none;
+      -webkit-background-clip: unset;
+      color: #f0b27a;
+    }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #b1c3ff;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      border-radius: 10px;
+      background: #2a2f45;
+      -webkit-appearance: none;
+    }
+    input[type="range"]:focus {
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #9f7aff;
+      cursor: pointer;
+      box-shadow: 0 0 6px #b794f4;
+      border: none;
+    }
+    input[type="number"], select {
+      background: #101624cc;
+      border: 1px solid #2f3a60;
+      border-radius: 16px;
+      padding: 8px 12px;
+      color: #eef4ff;
+      font-size: 0.85rem;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 4px;
+    }
+    .row {
+      display: flex;
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .row > div {
+      flex: 1;
+    }
+    .small-note {
+      font-size: 0.7rem;
+      color: #8a99d4;
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+    .btns {
+      display: flex;
+      gap: 12px;
+      margin: 20px 0 12px;
+    }
+    button {
+      background: rgba(45, 55, 95, 0.7);
+      border: 1px solid #6d7bb5;
+      border-radius: 40px;
+      padding: 10px 0;
+      font-weight: 600;
+      color: #eef3ff;
+      cursor: pointer;
+      transition: 0.2s;
+      backdrop-filter: blur(4px);
+      font-size: 0.85rem;
+    }
+    button:hover {
+      background: #5f6caf4d;
+      border-color: #b59eff;
+      transform: scale(0.98);
+    }
+    .stage {
+      position: relative;
+      background: #01041230;
+      border-radius: 32px;
+      backdrop-filter: blur(2px);
+      border: 1px solid rgba(80, 100, 147, 0.4);
+      overflow: hidden;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+    .hud {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 0.75rem;
+      font-family: monospace;
+      border-left: 3px solid #9f7aff;
+      pointer-events: none;
+      color: #d9e6ff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .hud b {
+      color: #ffd966;
+      font-weight: 600;
+    }
+    .status-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: #00000066;
+      border-radius: 30px;
+      padding: 4px 12px;
+      font-size: 0.7rem;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+    }
+    @media (max-width: 780px) {
+      .wrap { grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 12px; height: auto; min-height: 100vh; }
+      .stage { min-height: 460px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="title">✦ 复合电磁场 · 粒子动力学 (RK4) ✦</div>
+    <div class="row">
+      <div>
+        <label>⚡ 电场强度 |E|</label>
+        <input id="E_mag" type="range" min="0" max="12" step="0.1" value="0.0">
+        <div class="small-note">E = <span id="E_mag_v">0.0</span></div>
+      </div>
+      <div>
+        <label>🌀 电场方向 θ_E</label>
+        <input id="E_ang" type="range" min="0" max="360" step="1" value="0">
+        <div class="small-note"><span id="E_ang_v">0</span>°</div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>🧲 磁场强度 |B|</label>
+        <input id="B_mag" type="range" min="0" max="12" step="0.1" value="5.2">
+        <div class="small-note">|B| = <span id="B_mag_v">5.2</span></div>
+      </div>
+      <div>
+        <label>🧭 磁场方向 (垂直纸面)</label>
+        <select id="B_dir">
+          <option value="1" selected>🌕 出纸面 (+z)</option>
+          <option value="-1">🌑 入纸面 (-z)</option>
+        </select>
+        <div class="small-note">B = (0,0, ±|B|)</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>🔋 电荷 q</label>
+        <input id="q" type="range" min="-5" max="5" step="0.1" value="1.2">
+        <div class="small-note">q = <span id="q_v">1.2</span></div>
+      </div>
+      <div>
+        <label>⚖️ 质量 m</label>
+        <input id="m" type="range" min="0.2" max="8" step="0.1" value="1.0">
+        <div class="small-note">m = <span id="m_v">1.0</span></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>🚀 初速度 |v₀|</label>
+        <input id="v0" type="range" min="0" max="12" step="0.1" value="5.0">
+        <div class="small-note">v₀ = <span id="v0_v">5.0</span></div>
+      </div>
+      <div>
+        <label>🎯 初速度方向 θ_v</label>
+        <input id="v_ang" type="range" min="0" max="360" step="1" value="90">
+        <div class="small-note"><span id="v_ang_v">90</span>°</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>⏱️ 时间步长 dt (RK4稳定)</label>
+        <input id="dt" type="range" min="0.002" max="0.025" step="0.001" value="0.005">
+        <div class="small-note">dt = <span id="dt_v">0.005</span></div>
+      </div>
+      <div>
+        <label>⚡ 仿真倍速</label>
+        <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1.0">
+        <div class="small-note">倍速 <span id="speed_v">1.0</span> x</div>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button id="btnReset">⟳ 重置粒子</button>
+      <button id="btnRun">⏸️ 暂停</button>
+    </div>
+    <div class="small-note" style="margin-top: 8px; border-top: 1px solid #2f3a60; padding-top: 10px;">
+      💡 洛伦兹力：<strong style="color:#f0b27a;">F = q(E + v×B)</strong><br>
+      📐 磁场仅垂直纸面 | <span style="color:#9f7aff;">✅ 四阶RK积分器 → 无电场时轨迹完美闭合圆</span>
+    </div>
+  </div>
+
+  <div class="panel stage">
+    <canvas id="cv"></canvas>
+    <div class="hud" id="hud"></div>
+    <div class="status-badge" id="simStatus">▶ 运行中</div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    // ---------- canvas 与 坐标映射 ----------
+    const canvas = document.getElementById('cv');
+    const ctx = canvas.getContext('2d');
+    
+    // 世界比例：每单位 = 28 像素
+    let worldScale = 28;
+    
+    function getOrigin() {
+      const rect = canvas.getBoundingClientRect();
+      return { ox: rect.width / 2, oy: rect.height / 2 };
+    }
+    
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, rect.width * dpr);
+      canvas.height = Math.max(1, rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+    });
+    resizeCanvas();
+    
+    // DOM 元素绑定
+    const dom = {
+      E_mag: document.getElementById('E_mag'),
+      E_ang: document.getElementById('E_ang'),
+      B_mag: document.getElementById('B_mag'),
+      B_dir: document.getElementById('B_dir'),
+      q: document.getElementById('q'),
+      m: document.getElementById('m'),
+      v0: document.getElementById('v0'),
+      v_ang: document.getElementById('v_ang'),
+      dt: document.getElementById('dt'),
+      speed: document.getElementById('speed'),
+      btnReset: document.getElementById('btnReset'),
+      btnRun: document.getElementById('btnRun'),
+      hud: document.getElementById('hud'),
+      simStatus: document.getElementById('simStatus')
+    };
+    
+    // 显示数值辅助
+    const spans = {
+      E_mag_v: document.getElementById('E_mag_v'),
+      E_ang_v: document.getElementById('E_ang_v'),
+      B_mag_v: document.getElementById('B_mag_v'),
+      q_v: document.getElementById('q_v'),
+      m_v: document.getElementById('m_v'),
+      v0_v: document.getElementById('v0_v'),
+      v_ang_v: document.getElementById('v_ang_v'),
+      dt_v: document.getElementById('dt_v'),
+      speed_v: document.getElementById('speed_v')
+    };
+    
+    function updateReadouts() {
+      spans.E_mag_v.textContent = parseFloat(dom.E_mag.value).toFixed(2);
+      spans.E_ang_v.textContent = Math.round(parseFloat(dom.E_ang.value));
+      spans.B_mag_v.textContent = parseFloat(dom.B_mag.value).toFixed(2);
+      spans.q_v.textContent = parseFloat(dom.q.value).toFixed(2);
+      spans.m_v.textContent = parseFloat(dom.m.value).toFixed(2);
+      spans.v0_v.textContent = parseFloat(dom.v0.value).toFixed(2);
+      spans.v_ang_v.textContent = Math.round(parseFloat(dom.v_ang.value));
+      spans.dt_v.textContent = parseFloat(dom.dt.value).toFixed(3);
+      spans.speed_v.textContent = parseFloat(dom.speed.value).toFixed(1);
+    }
+    
+    // 获取当前电磁场
+    function getCurrentFields() {
+      const Emag = parseFloat(dom.E_mag.value);
+      const angE_rad = parseFloat(dom.E_ang.value) * Math.PI / 180;
+      const Ex = Emag * Math.cos(angE_rad);
+      const Ey = Emag * Math.sin(angE_rad);
+      const Bmag = parseFloat(dom.B_mag.value);
+      const Bdir = parseInt(dom.B_dir.value);
+      const Bz = Bdir * Bmag;
+      return { E: { x: Ex, y: Ey }, Bz };
+    }
+    
+    // 粒子状态
+    let particle = {
+      x: 0, y: 0,
+      vx: 0, vy: 0
+    };
+    let trail = [];
+    let running = true;
+    
+    function resetSimulation() {
+      const v0_mag = parseFloat(dom.v0.value);
+      const v_ang_rad = parseFloat(dom.v_ang.value) * Math.PI / 180;
+      const vx0 = v0_mag * Math.cos(v_ang_rad);
+      const vy0 = v0_mag * Math.sin(v_ang_rad);
+      particle = {
+        x: 0, y: 0,
+        vx: vx0,
+        vy: vy0
+      };
+      trail = [{ x: 0, y: 0 }];
+    }
+    
+    // ========== 四阶龙格-库塔 (RK4) 积分器 ==========
+    function stepPhysics(dt) {
+      if (dt <= 0) return;
+      const q = parseFloat(dom.q.value);
+      const m = Math.max(1e-5, parseFloat(dom.m.value));
+      const { E, Bz } = getCurrentFields();
+      
+      // 加速度函数 a = dv/dt = (q/m)*(E + v×B)
+      function acceleration(vx, vy) {
+        const ax = (q / m) * (E.x + vy * Bz);
+        const ay = (q / m) * (E.y - vx * Bz);
+        return { ax, ay };
+      }
+      
+      let x = particle.x, y = particle.y;
+      let vx = particle.vx, vy = particle.vy;
+      
+      // k1
+      let a1 = acceleration(vx, vy);
+      let k1_vx = a1.ax, k1_vy = a1.ay;
+      let k1_x = vx, k1_y = vy;
+      
+      // k2
+      let vx2 = vx + 0.5 * dt * k1_vx;
+      let vy2 = vy + 0.5 * dt * k1_vy;
+      let a2 = acceleration(vx2, vy2);
+      let k2_vx = a2.ax, k2_vy = a2.ay;
+      let k2_x = vx2, k2_y = vy2;
+      
+      // k3
+      let vx3 = vx + 0.5 * dt * k2_vx;
+      let vy3 = vy + 0.5 * dt * k2_vy;
+      let a3 = acceleration(vx3, vy3);
+      let k3_vx = a3.ax, k3_vy = a3.ay;
+      let k3_x = vx3, k3_y = vy3;
+      
+      // k4
+      let vx4 = vx + dt * k3_vx;
+      let vy4 = vy + dt * k3_vy;
+      let a4 = acceleration(vx4, vy4);
+      let k4_vx = a4.ax, k4_vy = a4.ay;
+      let k4_x = vx4, k4_y = vy4;
+      
+      // 组合更新
+      particle.vx = vx + dt * (k1_vx + 2*k2_vx + 2*k3_vx + k4_vx) / 6;
+      particle.vy = vy + dt * (k1_vy + 2*k2_vy + 2*k3_vy + k4_vy) / 6;
+      particle.x  = x  + dt * (k1_x  + 2*k2_x  + 2*k3_x  + k4_x) / 6;
+      particle.y  = y  + dt * (k1_y  + 2*k2_y  + 2*k3_y  + k4_y) / 6;
+      
+      // 记录轨迹
+      trail.push({ x: particle.x, y: particle.y });
+      if (trail.length > 4500) trail.shift();
+    }
+    // ==============================================
+    
+    // 绘图：网格、坐标轴
+    function drawGridAndAxes() {
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+      const { ox, oy } = getOrigin();
+      
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.strokeStyle = '#7d9eff';
+      ctx.lineWidth = 1;
+      const step = worldScale;
+      const startX = ox - (Math.floor(ox / step) + 1) * step;
+      for (let x = startX; x < W; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      const startY = oy - (Math.floor(oy / step) + 1) * step;
+      for (let y = startY; y < H; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, oy);
+      ctx.lineTo(W, oy);
+      ctx.moveTo(ox, 0);
+      ctx.lineTo(ox, H);
+      ctx.stroke();
+      ctx.fillStyle = '#bfd9ff';
+      ctx.beginPath();
+      ctx.arc(ox, oy, 4, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#aac8ff';
+      ctx.font = '10px monospace';
+      ctx.fillText('0', ox+5, oy-3);
+      ctx.restore();
+    }
+    
+    function drawArrow(x, y, dx, dy, color, label = '') {
+      if (Math.hypot(dx, dy) < 0.1) return;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + dx, y + dy);
+      ctx.stroke();
+      const angle = Math.atan2(dy, dx);
+      const headLen = 12;
+      const tipX = x + dx;
+      const tipY = y + dy;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - headLen * Math.cos(angle - Math.PI/6), tipY - headLen * Math.sin(angle - Math.PI/6));
+      ctx.lineTo(tipX - headLen * Math.cos(angle + Math.PI/6), tipY - headLen * Math.sin(angle + Math.PI/6));
+      ctx.fill();
+      if (label) {
+        ctx.font = 'bold 14px "Segoe UI"';
+        ctx.fillStyle = color;
+        ctx.fillText(label, x + dx + 6, y + dy - 4);
+      }
+      ctx.restore();
+    }
+    
+    function drawFieldsAndParticle() {
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+      const { ox, oy } = getOrigin();
+      const { E, Bz } = getCurrentFields();
+      
+      // 电场示意
+      const iconX = ox - W * 0.35;
+      const iconY = oy - H * 0.35;
+      const E_len = Math.hypot(E.x, E.y);
+      let eDirX = 1, eDirY = 0;
+      if (E_len > 1e-6) {
+        eDirX = E.x / E_len;
+        eDirY = E.y / E_len;
+      }
+      const arrowLenPx = 68;
+      drawArrow(iconX, iconY, eDirX * arrowLenPx, eDirY * arrowLenPx, '#ffae70', 'E');
+      
+      // 磁场指示器
+      const bIconX = ox + W * 0.28;
+      const bIconY = oy - H * 0.32;
+      ctx.save();
+      ctx.font = 'bold 18px "Segoe UI"';
+      ctx.fillStyle = '#9bbaff';
+      ctx.fillText('B', bIconX-12, bIconY+6);
+      if (Bz > 0) {
+        ctx.fillStyle = '#fea7a7';
+        ctx.beginPath();
+        ctx.arc(bIconX, bIconY, 14, 0, 2*Math.PI);
+        ctx.fill();
+        ctx.fillStyle = '#4c1e1e';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('•', bIconX-4, bIconY+6);
+      } else if (Bz < 0) {
+        ctx.strokeStyle = '#7bc5ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(bIconX-12, bIconY-12);
+        ctx.lineTo(bIconX+12, bIconY+12);
+        ctx.moveTo(bIconX+12, bIconY-12);
+        ctx.lineTo(bIconX-12, bIconY+12);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#8899bb';
+        ctx.fillText('⨀', bIconX-8, bIconY+6);
+      }
+      ctx.restore();
+      
+      // 绘制轨迹
+      if (trail.length > 1) {
+        ctx.beginPath();
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < trail.length; i++) {
+          const p = trail[i];
+          const sx = ox + p.x * worldScale;
+          const sy = oy - p.y * worldScale;
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.strokeStyle = '#b77eff';
+        ctx.stroke();
+        if (trail.length > 2) {
+          const lp = trail[trail.length-1];
+          const lpPrev = trail[trail.length-2];
+          const sx1 = ox + lpPrev.x * worldScale;
+          const sy1 = oy - lpPrev.y * worldScale;
+          const sx2 = ox + lp.x * worldScale;
+          const sy2 = oy - lp.y * worldScale;
+          ctx.beginPath();
+          ctx.moveTo(sx1, sy1);
+          ctx.lineTo(sx2, sy2);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#e2b9ff';
+          ctx.stroke();
+        }
+      }
+      
+      // 粒子绘制
+      const px = ox + particle.x * worldScale;
+      const py = oy - particle.y * worldScale;
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#c084fc';
+      const gradient = ctx.createRadialGradient(px-3, py-3, 3, px, py, 12);
+      const qVal = parseFloat(dom.q.value);
+      if (qVal >= 0) {
+        gradient.addColorStop(0, '#8affb0');
+        gradient.addColorStop(1, '#28c76f');
+      } else {
+        gradient.addColorStop(0, '#ff897e');
+        gradient.addColorStop(1, '#da3a2a');
+      }
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(px, py, 9, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(px-2, py-2, 2, 0, 2*Math.PI);
+      ctx.fillStyle = '#ffffffcc';
+      ctx.fill();
+      ctx.restore();
+      
+      // 速度矢量
+      const vmag = Math.hypot(particle.vx, particle.vy);
+      if (vmag > 0.05) {
+        let dirX = particle.vx / vmag;
+        let dirY = particle.vy / vmag;
+        const lenPx = Math.min(38, 18 + vmag * 1.8);
+        drawArrow(px, py, dirX * lenPx, dirY * lenPx, '#c0e0ff', '');
+      }
+    }
+    
+    function updateHUD() {
+      const v = Math.hypot(particle.vx, particle.vy);
+      const ke = 0.5 * parseFloat(dom.m.value) * v * v;
+      const { E, Bz } = getCurrentFields();
+      const q = parseFloat(dom.q.value);
+      dom.hud.innerHTML = `
+        <div>🔹 速率 |v| = <b>${v.toFixed(3)}</b> &nbsp; | 动能 Ek = <b>${ke.toFixed(3)}</b></div>
+        <div>📍 位置 (x, y) = (<b>${particle.x.toFixed(2)}</b>, <b>${particle.y.toFixed(2)}</b>)</div>
+        <div>🧪 电荷 q = ${q.toFixed(2)} &nbsp;| 质量 m = ${parseFloat(dom.m.value).toFixed(2)}</div>
+        <div>⚡ E = (${E.x.toFixed(2)}, ${E.y.toFixed(2)}) &nbsp; 🧲 Bz = ${Bz.toFixed(2)}</div>
+        <div style="margin-top:4px;">🎯 RK4 积分 → 纯磁场轨迹完美闭合圆</div>
+      `;
+    }
+    
+    // 参数自动重置 (物理量改变重置轨迹)
+    const autoResetInputs = ['E_mag', 'E_ang', 'B_mag', 'B_dir', 'q', 'm', 'v0', 'v_ang'];
+    function attachAutoReset() {
+      autoResetInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', () => {
+            updateReadouts();
+            resetSimulation();
+          });
+          el.addEventListener('change', () => {
+            updateReadouts();
+            resetSimulation();
+          });
+        }
+      });
+      dom.dt.addEventListener('input', updateReadouts);
+      dom.speed.addEventListener('input', updateReadouts);
+    }
+    
+    dom.btnReset.addEventListener('click', () => {
+      resetSimulation();
+    });
+    dom.btnRun.addEventListener('click', () => {
+      running = !running;
+      dom.btnRun.textContent = running ? '⏸️ 暂停' : '▶️ 继续';
+      dom.simStatus.textContent = running ? '▶ 运行中' : '⏸ 暂停';
+    });
+    
+    // 动画循环
+    function animate() {
+      if (running) {
+        let dt_val = parseFloat(dom.dt.value);
+        let speedFactor = parseFloat(dom.speed.value);
+        if (dt_val > 0 && speedFactor > 0) {
+          let steps = Math.floor(speedFactor);
+          let frac = speedFactor - steps;
+          for (let i = 0; i < steps; i++) {
+            stepPhysics(dt_val);
+          }
+          if (frac > 1e-6) stepPhysics(dt_val * frac);
+        }
+      }
+      
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        drawGridAndAxes();
+        drawFieldsAndParticle();
+        updateHUD();
+      }
+      
+      requestAnimationFrame(animate);
+    }
+    
+    window.addEventListener('resize', () => {
+      setTimeout(() => {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width && rect.height) {
+          ctx.clearRect(0, 0, rect.width, rect.height);
+        }
+      }, 20);
+    });
+    
+    function init() {
+      updateReadouts();
+      attachAutoReset();
+      resetSimulation();
+      running = true;
+      dom.btnRun.textContent = '⏸️ 暂停';
+      dom.simStatus.textContent = '▶ 运行中';
+      animate();
+    }
+    
+    init();
+  })();
+</script>
+</body>
+</html>
